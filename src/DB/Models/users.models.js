@@ -1,11 +1,11 @@
 import mongoose from "mongoose";
 import { genderEnum, roleEnum } from "../../Common/Enums/enums.js";
+import { providerEnum } from "../../Middleware/authorization.middleware.js";
 
 
 const userSchema = new mongoose.Schema({
     firstName:{
         type:String,
-        required:true,
         trim:true,
         lowercase:true,
         minLength:3,
@@ -13,15 +13,11 @@ const userSchema = new mongoose.Schema({
     },
     lastName:{
         type:String,
-        required:true,
         trim:true,
         lowercase:true,
-        minLength:3,
-        maxLength:20
     },
     email:{
         type:String,
-        required:true,
         unique:true,
         trim:true,
         lowercase:true,
@@ -29,12 +25,10 @@ const userSchema = new mongoose.Schema({
     },
     password:{
         type:String,
-        required:true,
         trim:true
     },
     age:{
         type:Number,
-        required:true,
         trim:true,
         minAge:[18,'age must be greater than 18'],
         maxAge:[60,'age must be less than 60'],
@@ -42,12 +36,10 @@ const userSchema = new mongoose.Schema({
     },
     gender:{
         type:String,
-        required:true,
-        enum:Object.values(genderEnum),
+        enum:Object.values(genderEnum)
     },
     phoneNumber:{
         type:String,
-        required:true
     },
     otp:{
         confirmation:String,
@@ -61,7 +53,14 @@ const userSchema = new mongoose.Schema({
         type:String,
         enum:Object.values(roleEnum),
         default:roleEnum.ADMIN
-    }
+    },
+    provider:{
+        type:String,
+        enum:Object.values(providerEnum),
+        default:providerEnum.LOCAL
+    },
+    googleSub:String,
+    profileImage:String
 },{
     timestamps:true,
     toObject:{

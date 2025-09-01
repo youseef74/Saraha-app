@@ -13,3 +13,8 @@ export const authorizationMiddleware = (allwoedRoles)=>{
         return res.status(401).json({message:"Unauthorized"})
     }
 }
+
+export const providerEnum = {
+    GOOGLE: "GOOGLE",
+    LOCAL: "LOCAL"
+}
