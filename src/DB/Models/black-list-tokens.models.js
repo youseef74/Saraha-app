@@ -2,7 +2,12 @@ import mongoose from "mongoose";
 
 export const blackListTokensSchema = new mongoose.Schema({
     tokenId:{type:String,required:true,unique:true},
-    expirationDate:{type:Date,required:true}
+    expirationDate: { 
+        type: Date, 
+        required: true, 
+        index: { expires: 0 } 
+      }
+    
 }
 )
 

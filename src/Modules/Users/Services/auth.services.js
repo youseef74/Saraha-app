@@ -7,6 +7,9 @@ import { v4 as uuidv4 } from 'uuid';
 import { generateToken, verifyToken } from "../../../Utils/tokens.utils.js";
 import BlackListTokens from "../../../DB/Models/black-list-tokens.models.js";
 import { OAuth2Client } from 'google-auth-library';
+import ResetPassword from "../../../DB/Models/reset-password.models.js";
+import Session from "../../../DB/Models/session.model.js";
+
 
 const uniqueString = customAlphabet('gfdgdfgfhdadd', 6);
 
@@ -76,17 +79,27 @@ export const confirmUser = async (req, res, next) => {
 
 // ================= SIGN IN =================
 export const signInService = async (req, res) => {
-  const { email, password } = req.body;
+  const { email, password, deviceId } = req.body; // لازم يجي من client
   const user = await User.findOne({ email });
 
   if (!user || !compareSync(password, user.password)) {
     return res.status(404).json({ message: "Invalid email or password" });
   }
 
+  let sessions = await Session.find({ userId: user._id });
+  const existingSession = sessions.find(s => s.deviceId === deviceId);
+
+  if (!existingSession && sessions.length >= 2) {
+    return res.status(403).json({
+      message: "You can only login from 2 devices. Please logout from another device first."
+    });
+  }
+
+  const tokenId = uuidv4();
   const token = generateToken(
     { userId: user._id, email: user.email },
     process.env.JWT_SECRET_KEY,
-    { expiresIn: process.env.JWT_EXPIRATION_TIME, jwtid: uuidv4() }
+    { expiresIn: process.env.JWT_EXPIRATION_TIME, jwtid: tokenId }
   );
 
   const refreshToken = generateToken(
@@ -95,6 +108,13 @@ export const signInService = async (req, res) => {
     { expiresIn: process.env.JWT_REFRESH_TOKEN_EXPIRATION, jwtid: uuidv4() }
   );
 
+  if (!existingSession) {
+    await Session.create({ userId: user._id, deviceId, tokenId });
+  } else {
+    existingSession.tokenId = tokenId;
+    await existingSession.save();
+  }
+
   return res.status(200).json({
     message: "User signed in successfully",
     user: { id: user._id, email: user.email, firstName: user.firstName, lastName: user.lastName },
@@ -102,19 +122,21 @@ export const signInService = async (req, res) => {
     refreshToken
   });
 };
-
 // ================= LOGOUT =================
 export const logoutService = async (req, res) => {
-  const { token: { tokenId, expirationDate }, user: { _id } } = req.loggedInUser;
+  const { token: { tokenId }, user: { _id }, deviceId } = req.loggedInUser;
+
+  await Session.deleteOne({ userId: _id, deviceId, tokenId });
 
   const blackListTokenInstance = new BlackListTokens({
     tokenId,
-    expirationDate: new Date(expirationDate * 1000),
+    expirationDate: new Date(req.loggedInUser.token.expirationDate * 1000),
     userId: _id
   });
 
   await blackListTokenInstance.save();
-  return res.status(200).json({ message: "Token blacklisted successfully" });
+
+  return res.status(200).json({ message: "Logged out successfully" });
 };
 
 // ================= REFRESH TOKEN =================
@@ -181,3 +203,69 @@ export const signUpServiceGmail = async (req, res) => {
   }
 };
 
+// ================= FORGET PASSWORD =================
+export const forgetPasswordService = async (req, res) => {
+  const { email } = req.body;
+
+  const user = await User.findOne({ email });
+  if (!user) {
+    return res.status(404).json({ message: "User not found" });
+  }
+
+  const otp = uniqueString();
+  const hashedOtp = hashSync(otp, +process.env.SALT_ROUNDS);
+
+  const expirationDate = new Date();
+  expirationDate.setMinutes(expirationDate.getMinutes() + 10);
+
+  await ResetPassword.findOneAndUpdate(
+    { userId: user._id },
+    { userId: user._id, token: hashedOtp, expirationDate },
+    { upsert: true, new: true }
+  );
+
+  emitter.emit("sendEmail", {
+    to: email,
+    subject: "Reset Password OTP",
+    content: `
+      <h2>Password Reset Request</h2>
+      <p>You have requested to reset your password. Use the following OTP to proceed:</p>
+      <h3>${otp}</h3>
+      <p>This OTP will expire in 10 minutes.</p>
+      <p>If you didn't request this, please ignore this email.</p>
+    `
+  });
+
+  return res.status(200).json({
+    message: "Password reset OTP sent to your email",
+    userId: user._id
+  });
+};
+
+// ================= RESET PASSWORD =================
+export const resetPasswordService = async (req, res) => {
+
+  const { userId, otp, newPassword } = req.body;
+
+  const resetRecord = await ResetPassword.findOne({ userId });
+  if (!resetRecord) {
+    return res.status(400).json({ message: "Invalid or expired reset token" });
+  }
+
+  if (resetRecord.expirationDate < new Date()) {
+    await ResetPassword.deleteOne({ userId });
+    return res.status(400).json({ message: "OTP has expired" });
+  }
+
+  const isOtpValid = compareSync(otp, resetRecord.token);
+  if (!isOtpValid) {
+    return res.status(400).json({ message: "Invalid OTP" });
+  }
+
+  const hashedPassword = hashSync(newPassword, +process.env.SALT_ROUNDS);
+  await User.findByIdAndUpdate(userId, { password: hashedPassword });
+
+  await ResetPassword.deleteOne({ userId });
+
+  return res.status(200).json({ message: "Password reset successfully" });
+};

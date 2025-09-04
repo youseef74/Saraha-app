@@ -43,7 +43,10 @@ const userSchema = new mongoose.Schema({
     },
     otp:{
         confirmation:String,
-        resetPassword:String
+        resetPassword:{
+            type:String,
+            expirationDate:Date
+        }
     },
     isConfirmed:{
         type:Boolean,

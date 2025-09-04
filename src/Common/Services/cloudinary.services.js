@@ -1,6 +1,10 @@
 import {v2 as cloudinary} from "cloudinary"
 
-console.log(process.env.CLOUD_NAME,process.env.API_KEY,process.env.API_SECRET);
+console.log(
+    process.env.CLOUDINARY_CLOUD_NAME,
+    process.env.CLOUDINARY_API_KEY,
+    process.env.CLOUDINARY_API_SECRET
+);
 
 cloudinary.config({
     cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
@@ -9,14 +13,24 @@ cloudinary.config({
 });
 
 export const uploadFileCloudinary = async(file,options)=>{
-    const result = await cloudinary.uploader.upload(file,options)
+    const result = await cloudinary.uploader.upload(file,{
+        folder: "profiles",       
+        width: 512,              
+        height: 512,
+        crop: "fill"
+    })
     return result
 }
 
 export const uploadManyFileCloudinary = async (files)=>{
     const result= []
     for(const file of files){
-        const {secure_url,public_id} = await uploadFileCloudinary(file,options)
+        const {secure_url,public_id} = await uploadFileCloudinary(file,{
+            folder: "profiles",       
+            width: 512,              
+            height: 512,
+            crop: "fill"
+        })
         result.push({secure_url,public_id})
     }
     return result
