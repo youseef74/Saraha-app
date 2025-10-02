@@ -19,8 +19,10 @@ export const sendMessageService = async (req, res, next) => {
     await messageInstance.save()
 
     return res.status(200).json({message:"Message sent successfully",messageInstance})
+  } catch (error) {
+    next(error);
+  }
 }
-
 
 export const getMessagesService = async(req,res)=>{
     const messages = await Message.find().populate({

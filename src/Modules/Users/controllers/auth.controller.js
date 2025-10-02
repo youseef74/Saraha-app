@@ -6,8 +6,6 @@ import {
   confirmUser,
   logoutService,
   refreshTokenService,
-  forgetPasswordService,
-  resetPasswordService,
 } from "../Services/auth.services.js";
 
 import { authenticationMiddleware } from "../../../Middleware/authentication.middleware.js";

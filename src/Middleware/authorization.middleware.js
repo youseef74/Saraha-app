@@ -1,16 +1,15 @@
 
 
-export const authorizationMiddleware = (allwoedRoles)=>{
+export const authorizationMiddleware = (allowedRoles)=>{
     return (req,res,next)=>{
         const {user:{role}} = req.loggedInUser
 
         
 
-        if(allwoedRoles.includes(role)){
+        if(allowedRoles.includes(role)){
             return next()
 
         }
-        console.log('role:', role, 'allowed:', allwoedRoles)
         return res.status(403).json({message:"Forbidden"})
     }
 }
