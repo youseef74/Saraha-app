@@ -2,7 +2,6 @@ import mongoose from "mongoose";
 import { genderEnum, roleEnum } from "../../Common/Enums/enums.js";
 import { providerEnum } from "../../Middleware/authorization.middleware.js";
 
-
 const userSchema = new mongoose.Schema({
     firstName:{
         type:String,
@@ -43,10 +42,7 @@ const userSchema = new mongoose.Schema({
     },
     otp:{
         confirmation:String,
-        resetPassword:{
-            type:String,
-            expirationDate:Date
-        }
+        resetPassword:String
     },
     isConfirmed:{
         type:Boolean,
@@ -89,15 +85,14 @@ const userSchema = new mongoose.Schema({
     }
 })
 
-userSchema.index({firstName:1,lastName:1},{name:"idx_fullName",unique:true})
+userSchema.index({ firstName: 1, lastName: 1 }, { name: "idx_fullName", unique: true });
 
+userSchema.virtual("Message", {
+  ref: "Message",
+  localField: "_id",
+  foreignField: "receiverId"
+});
 
-userSchema.virtual("Message",{
-    ref:"Message",
-    localField:"_id",
-    foreignField:"receiverId"
-})
+const User = mongoose.model("User", userSchema);
 
-const User = mongoose.model("User",userSchema)
-
-export default User
+export default User;

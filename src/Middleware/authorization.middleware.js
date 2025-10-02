@@ -7,10 +7,11 @@ export const authorizationMiddleware = (allwoedRoles)=>{
         
 
         if(allwoedRoles.includes(role)){
-            next()
+            return next()
 
         }
-        return res.status(401).json({message:"Unauthorized"})
+        console.log('role:', role, 'allowed:', allwoedRoles)
+        return res.status(403).json({message:"Forbidden"})
     }
 }
 

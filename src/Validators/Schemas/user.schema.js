@@ -26,12 +26,10 @@ export const signUpSchema =  {
         gender:Joi.string().valid(...Object.values(genderEnum)),
         phoneNumber:Joi.string().pattern(/^[0-9]{10}$/),
         isConfirmed:Joi.boolean().truthy("yes").falsy("no").sensitive(),
-        // skillsName:Joi.array().items(Joi.string().valid(...names)).length(2),
         skills:Joi.array().items(Joi.object({
             name:Joi.string().valid(...names),
             level:Joi.string().valid(...Object.values(skillLevelEnum))
         })).length(2),
-        // userId:Joi.custom(objectValidator),
         couponType:Joi.string().valid('fixed','percentage'),
         couponAmount:Joi.when("couponType",{
             is:Joi.string().valid('percentage'),

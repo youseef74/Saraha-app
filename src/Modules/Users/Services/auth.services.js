@@ -7,11 +7,8 @@ import { v4 as uuidv4 } from 'uuid';
 import { generateToken, verifyToken } from "../../../Utils/tokens.utils.js";
 import BlackListTokens from "../../../DB/Models/black-list-tokens.models.js";
 import { OAuth2Client } from 'google-auth-library';
-import ResetPassword from "../../../DB/Models/reset-password.models.js";
-import Session from "../../../DB/Models/session.model.js";
 
-
-const uniqueString = customAlphabet('gfdgdfgfhdadd', 6);
+const uniqueString = customAlphabet('12345678909425', 6);
 
 // ================= SIGN UP =================
 export const signUpService = async (req, res) => {
@@ -41,11 +38,39 @@ export const signUpService = async (req, res) => {
     otp: { confirmation: hashSync(otp, +process.env.SALT_ROUNDS) }
   });
 
-  emitter.emit('sendEmail', {
-    to: email,
-    subject: "Confirmation email",
-    content: `<h1>Your OTP is ${otp}</h1>`
-  });
+emitter.emit('sendEmail', {
+  to: email,
+  subject: "Email Confirmation - Your OTP Code",
+  content: `
+  <div style="font-family: Arial, sans-serif; background-color: #f4f6f9; padding: 30px;">
+    <div style="max-width: 500px; margin: auto; background: #fff; border-radius: 10px; padding: 20px; box-shadow: 0 4px 12px rgba(0,0,0,0.1);">
+      
+      <h2 style="text-align:center; color:#4CAF50;">🔒 Email Verification</h2>
+      
+      <p style="font-size:16px; color:#333;">Hello,</p>
+      <p style="font-size:15px; color:#555;">
+        Please use the following OTP code to confirm your email address:
+      </p>
+      
+      <div style="text-align:center; margin:20px 0;">
+        <span style="display:inline-block; background:#4CAF50; color:#fff; font-size:28px; font-weight:bold; padding:15px 30px; border-radius:8px; letter-spacing:5px;">
+          ${otp}
+        </span>
+      </div>
+      
+      <p style="font-size:14px; color:#555;">⚠️ This OTP is valid for <b>10 minutes</b>.</p>
+      <p style="font-size:14px; color:#999;">If you didn’t request this, you can safely ignore this email.</p>
+      
+      <hr style="border:none; border-top:1px solid #eee; margin:20px 0;">
+      
+      <p style="font-size:12px; text-align:center; color:#aaa;">
+        &copy; ${new Date().getFullYear()} Saraha App. All rights reserved.
+      </p>
+    </div>
+  </div>
+  `
+});
+
 
   await userInstance.save();
 
@@ -86,16 +111,6 @@ export const signInService = async (req, res) => {
     return res.status(404).json({ message: "Invalid email or password" });
   }
 
-  let sessions = await Session.find({ userId: user._id });
-  const existingSession = sessions.find(s => s.deviceId === deviceId);
-
-  if (!existingSession && sessions.length >= 2) {
-    return res.status(403).json({
-      message: "You can only login from 2 devices. Please logout from another device first."
-    });
-  }
-
-  const tokenId = uuidv4();
   const token = generateToken(
     { userId: user._id, email: user.email },
     process.env.JWT_SECRET_KEY,
@@ -108,13 +123,6 @@ export const signInService = async (req, res) => {
     { expiresIn: process.env.JWT_REFRESH_TOKEN_EXPIRATION, jwtid: uuidv4() }
   );
 
-  if (!existingSession) {
-    await Session.create({ userId: user._id, deviceId, tokenId });
-  } else {
-    existingSession.tokenId = tokenId;
-    await existingSession.save();
-  }
-
   return res.status(200).json({
     message: "User signed in successfully",
     user: { id: user._id, email: user.email, firstName: user.firstName, lastName: user.lastName },
@@ -124,9 +132,7 @@ export const signInService = async (req, res) => {
 };
 // ================= LOGOUT =================
 export const logoutService = async (req, res) => {
-  const { token: { tokenId }, user: { _id }, deviceId } = req.loggedInUser;
-
-  await Session.deleteOne({ userId: _id, deviceId, tokenId });
+  const { token: { tokenId, expirationDate }, user: { _id } } = req.loggedInUser;
 
   const blackListTokenInstance = new BlackListTokens({
     tokenId,
@@ -141,12 +147,19 @@ export const logoutService = async (req, res) => {
 
 // ================= REFRESH TOKEN =================
 export const refreshTokenService = async (req, res) => {
-  const { refreshtoken } = req.headers;
-  const decodedData = verifyToken(refreshtoken, process.env.JWT_REFRESH_TOKEN_SECRET_KEY);
-
-  if (!decodedData.jti) {
-    return res.status(401).json({ message: "Invalid token" });
+  let refreshToken = req.headers.refreshtoken;
+  const authHeader = req.headers.authorization;
+  if (!refreshToken && authHeader && authHeader.startsWith('Bearer ')) {
+    refreshToken = authHeader.split(' ')[1];
   }
+
+  if (!refreshToken) {
+    return res.status(400).json({ message: "Refresh token is required" });
+  }
+
+  const decodedData = verifyToken(refreshToken, process.env.JWT_REFRESH_TOKEN_SECRET_KEY);
+
+  if (!decodedData || !decodedData.jti) return res.status(401).json({ message: "Invalid token" });
 
   const token = generateToken(
     { userId: decodedData.userId, email: decodedData.email },
@@ -203,69 +216,3 @@ export const signUpServiceGmail = async (req, res) => {
   }
 };
 
-// ================= FORGET PASSWORD =================
-export const forgetPasswordService = async (req, res) => {
-  const { email } = req.body;
-
-  const user = await User.findOne({ email });
-  if (!user) {
-    return res.status(404).json({ message: "User not found" });
-  }
-
-  const otp = uniqueString();
-  const hashedOtp = hashSync(otp, +process.env.SALT_ROUNDS);
-
-  const expirationDate = new Date();
-  expirationDate.setMinutes(expirationDate.getMinutes() + 10);
-
-  await ResetPassword.findOneAndUpdate(
-    { userId: user._id },
-    { userId: user._id, token: hashedOtp, expirationDate },
-    { upsert: true, new: true }
-  );
-
-  emitter.emit("sendEmail", {
-    to: email,
-    subject: "Reset Password OTP",
-    content: `
-      <h2>Password Reset Request</h2>
-      <p>You have requested to reset your password. Use the following OTP to proceed:</p>
-      <h3>${otp}</h3>
-      <p>This OTP will expire in 10 minutes.</p>
-      <p>If you didn't request this, please ignore this email.</p>
-    `
-  });
-
-  return res.status(200).json({
-    message: "Password reset OTP sent to your email",
-    userId: user._id
-  });
-};
-
-// ================= RESET PASSWORD =================
-export const resetPasswordService = async (req, res) => {
-
-  const { userId, otp, newPassword } = req.body;
-
-  const resetRecord = await ResetPassword.findOne({ userId });
-  if (!resetRecord) {
-    return res.status(400).json({ message: "Invalid or expired reset token" });
-  }
-
-  if (resetRecord.expirationDate < new Date()) {
-    await ResetPassword.deleteOne({ userId });
-    return res.status(400).json({ message: "OTP has expired" });
-  }
-
-  const isOtpValid = compareSync(otp, resetRecord.token);
-  if (!isOtpValid) {
-    return res.status(400).json({ message: "Invalid OTP" });
-  }
-
-  const hashedPassword = hashSync(newPassword, +process.env.SALT_ROUNDS);
-  await User.findByIdAndUpdate(userId, { password: hashedPassword });
-
-  await ResetPassword.deleteOne({ userId });
-
-  return res.status(200).json({ message: "Password reset successfully" });
-};

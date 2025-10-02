@@ -1,22 +1,20 @@
-import User from "../DB/Models/users.models.js";
-import BlackListTokens from "../DB/Models/black-list-tokens.models.js";
-import Session from "../DB/Models/session.model.js";  
-import { verifyToken } from "../Utils/tokens.utils.js";
+import User from "../DB/Models/users.models.js"
+import BlackListTokens from "../DB/Models/black-list-tokens.models.js"
+import { verifyToken } from "../Utils/tokens.utils.js"
 
 export const authenticationMiddleware = async (req, res, next) => {
-  let token = req.headers.token;
-
-  if (!token && req.headers.authorization?.startsWith("Bearer ")) {
-    token = req.headers.authorization.split(" ")[1];
-  }
+  const token = req.headers.token;
 
   if (!token) {
-    return res.status(401).json({ message: "Unauthorized, token missing" });
+    return res.status(401).json({ message: "Unauthorized" });
   }
 
-  const decodedData = verifyToken(token, process.env.JWT_SECRET_KEY);
+  const token = authHeader.split(' ')[1];
 
-  if (!decodedData.jti) {
+  const decodedData = verifyToken(token, process.env.JWT_SECRET_KEY);
+  console.log("decodedData:", decodedData);
+
+  if (!decodedData || !decodedData.jti) {
     return res.status(401).json({ message: "invalid token" });
   }
 
@@ -26,16 +24,6 @@ export const authenticationMiddleware = async (req, res, next) => {
     return res.status(401).json({ message: "Token blacklisted" });
   }
 
-  //  Check active session
-  const activeSession = await Session.findOne({
-    userId: decodedData.userId,
-    tokenId: decodedData.jti
-  });
-  if (!activeSession) {
-    return res.status(401).json({ message: "Session not valid, please login again" });
-  }
-
-  //  Attach user
   const user = await User.findById(decodedData?.userId).lean();
   if (!user) {
     return res.status(401).json({ message: "User not found" });
@@ -48,4 +36,21 @@ export const authenticationMiddleware = async (req, res, next) => {
   };
 
   next();
+};
+
+export const authorizationMiddleware = (allowedRoles) => {
+  return (req, res, next) => {
+    const { user: { role } } = req.loggedInUser;
+
+    if (allowedRoles.includes(role)) {
+      return next();
+    }
+
+    return res.status(401).json({ message: "Unauthorized" });
+  };
+};
+
+export const providerEnum = {
+  GOOGLE: "GOOGLE",
+  LOCAL: "LOCAL"
 };
