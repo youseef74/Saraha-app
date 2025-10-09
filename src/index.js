@@ -7,7 +7,7 @@ import cors from 'cors';
 import helmet from 'helmet';
 import {limiter} from './Middleware/rate-limiter.middleware.js'
 import authController from './Modules/Users/controllers/auth.controller.js';
-
+import notificationController from './Modules/Notifications/notification.controller.js';
 
 const app = express();
 
@@ -46,6 +46,7 @@ app.get('/test',(req,res)=>{
 })
 app.use('/users', userController,authController);
 app.use('/messages', messageController);
+app.use('/notifications', notificationController);
 
 
 

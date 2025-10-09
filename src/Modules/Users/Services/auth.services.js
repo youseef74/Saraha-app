@@ -7,6 +7,7 @@ import { v4 as uuidv4 } from 'uuid';
 import { generateToken, verifyToken } from "../../../Utils/tokens.utils.js";
 import BlackListTokens from "../../../DB/Models/black-list-tokens.models.js";
 import { OAuth2Client } from 'google-auth-library';
+import ResetPassword from "../../../DB/Models/reset-password.models.js";
 
 const uniqueString = customAlphabet('12345678909425', 6);
 
@@ -104,7 +105,7 @@ export const confirmUser = async (req, res, next) => {
 
 // ================= SIGN IN =================
 export const signInService = async (req, res) => {
-  const { email, password, deviceId } = req.body; // لازم يجي من client
+  const { email, password, deviceId } = req.body; 
   const user = await User.findOne({ email });
 
   if (!user || !compareSync(password, user.password)) {
@@ -114,7 +115,7 @@ export const signInService = async (req, res) => {
   const token = generateToken(
     { userId: user._id, email: user.email },
     process.env.JWT_SECRET_KEY,
-    { expiresIn: process.env.JWT_EXPIRATION_TIME, jwtid: tokenId }
+    { expiresIn: process.env.JWT_EXPIRATION_TIME, jwtid: uuidv4() }
   );
 
   const refreshToken = generateToken(
@@ -216,3 +217,67 @@ export const signUpServiceGmail = async (req, res) => {
   }
 };
 
+// ================= FORGET PASSWORD =================
+export const forgetPasswordService = async (req, res) => {
+  const { email } = req.body;
+
+  const user = await User.findOne({ email });
+  if (!user) {
+    return res.status(404).json({ message: "User not found" });
+  }
+
+  const otp = uniqueString();
+  const hashedOtp = hashSync(otp, +process.env.SALT_ROUNDS);
+  const expirationDate = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes
+
+  await ResetPassword.findOneAndUpdate(
+    { userId: user._id },
+    { token: hashedOtp, expirationDate },
+    { upsert: true, new: true }
+  );
+
+  emitter.emit('sendEmail', {
+    to: email,
+    subject: 'Password Reset OTP',
+    content: `
+      <div style="font-family: Arial, sans-serif; background-color: #f4f6f9; padding: 30px;">
+        <div style="max-width: 500px; margin: auto; background: #fff; border-radius: 10px; padding: 20px; box-shadow: 0 4px 12px rgba(0,0,0,0.1);">
+          <h2 style="text-align:center; color:#4CAF50;">Reset Your Password</h2>
+          <p>Use this OTP to reset your password. It expires in 10 minutes.</p>
+          <div style="text-align:center; margin:20px 0;">
+            <span style="display:inline-block; background:#4CAF50; color:#fff; font-size:28px; font-weight:bold; padding:15px 30px; border-radius:8px; letter-spacing:5px;">${otp}</span>
+          </div>
+        </div>
+      </div>
+    `
+  });
+
+  return res.status(200).json({ message: 'OTP sent to email' });
+};
+
+// ================= RESET PASSWORD =================
+export const resetPasswordService = async (req, res) => {
+  const { userId, otp, newPassword } = req.body;
+
+  const resetDoc = await ResetPassword.findOne({ userId });
+  if (!resetDoc) {
+    return res.status(400).json({ message: 'No reset request found' });
+  }
+
+  if (resetDoc.expirationDate < new Date()) {
+    await ResetPassword.deleteOne({ _id: resetDoc._id });
+    return res.status(400).json({ message: 'OTP expired' });
+  }
+
+  const isValid = compareSync(otp, resetDoc.token);
+  if (!isValid) {
+    return res.status(400).json({ message: 'Invalid OTP' });
+  }
+
+  const hashedPassword = hashSync(newPassword, +process.env.SALT_ROUNDS);
+  await User.updateOne({ _id: userId }, { $set: { password: hashedPassword } });
+
+  await ResetPassword.deleteOne({ _id: resetDoc._id });
+
+  return res.status(200).json({ message: 'Password reset successfully' });
+};

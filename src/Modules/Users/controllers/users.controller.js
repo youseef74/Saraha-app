@@ -19,12 +19,6 @@ userController.put('/updateUser', authenticationMiddleware, updateUserService);
 userController.delete('/deleteUser/:userId', authenticationMiddleware, deleteUserService);
 userController.put('/updatePassword', authenticationMiddleware, updatePasswordService);
 userController.post('/uploadProfile', authenticationMiddleware, hostUpload({}).single('profile'), uploadProfieServices);
-
-userController.get(
-  '/listUsers',
-  authenticationMiddleware,
-  authorizationMiddleware(privillage.ADMIN_SUPER_ADMIN),
-  listUserService
-);
+userController.get('/listUsers',authenticationMiddleware,authorizationMiddleware(privillage.ADMIN_SUPER_ADMIN),listUserService);
 
 export default userController;

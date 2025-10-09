@@ -5,7 +5,9 @@ const messageSchema = new mongoose.Schema({
     receiverId:{
         type:mongoose.Schema.Types.ObjectId,
         ref:"User"
-    }
+    },
+    isPublic: { type: Boolean, default: false },
+    reactions: [{ type: String }]
     },
     {
         timestamps:true
